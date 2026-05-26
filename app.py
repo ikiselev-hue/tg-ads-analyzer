@@ -15,6 +15,34 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Удобный разбитый словарь категорий для безопасного импорта
+cat_map = {
+    "Криптовалюта": "crypto",
+    "Бизнес и стартапы": "business",
+    "Финансы и инвестиции": "finance",
+    "Маркетинг и реклама": "marketing",
+    "Блоги / Эксперты": "blogs",
+    "Новостные каналы": "news",
+    "Юмор и развлечения": "humor",
+    "Технологии и софт": "tech",
+    "Образование и наука": "education",
+    "Ставки и беттинг": "betting",
+    "Психология": "psychology"
+}
+
+CATEGORIES_LIST = ["Все категории"] + list(cat_map.keys())
+
+GEOS_LIST = [
+    "russia", "turkey", "india", "brazil", "usa", 
+    "uzbekistan", "kazakhstan", "belarus", "ukraine", 
+    "germany", "france", "indonesia", "united_arab_emirates"
+]
+
+LANGS_LIST = [
+    "Все языки", "ru", "tr", "en", "hi", "pt", 
+    "uz", "kk", "be", "uk", "de", "fr", "id", "ar"
+]
+
 class TelemetrProductionAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key.strip() if api_key else None
@@ -60,39 +88,4 @@ class TelemetrProductionAPI:
                         "category": item.get("category") or "—",
                         "title": item.get("title", "Без названия"),
                         "link": item.get("link") or f"https://t.me/{item.get('username', '')}",
-                        "subs": int(item.get("participants_count") or item.get("subs", 0)),
-                        "views": int(item.get("views_per_post") or item.get("views", 0)),
-                        "er": float(item.get("er") or 0.0),
-                        "growth_24h": int(item.get("growth_24h") or item.get("growth", 0)),
-                        "ads_index": int(item.get("ads_index") or item.get("members_ads_count", 0)),
-                        "about": item.get("about", "Описание отсутствует"),
-                        "recent_posts": " | ".join([p.get("text", "") for p in item.get("recent_posts", [])[:3]]) or "Контент недоступен"
-                    })
-                if len(items) < limit_per_page: break
-                page += 1
-                time.sleep(0.5)
-            except Exception as e:
-                st.error(f"💥 Ошибка кода: {str(e)}")
-                break
-        return collected_channels
-
-def run_gemini_intelligence(title, about, posts, product_info, api_key):
-    if not api_key: return {"score": "5", "verdict": "Демо-режим", "banner": "—"}
-    try:
-        genai.configure(api_key=api_key.strip())
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = f"Ты аналитик Telegram Ads. Продукт: '{product_info}'. Канал: {title}. Био: {about}. Посты: {posts}. Верни СТРОГО JSON: {{\"score\": \"1-10\", \"verdict\": \"текст\", \"banner\": \"текст до 160 симв\"}}"
-        response = model.generate_content(prompt)
-        sanitized = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(sanitized)
-    except:
-        return {"score": "5", "verdict": "Ошибка ИИ", "banner": "—"}
-
-if "database_state" not in st.session_state: st.session_state.database_state = None
-
-# --- ПОДГОТОВКА ПОЛНЫХ СПРАВОЧНИКОВ СЛОВАРЕЙ ---
-CATEGORIES_LIST = ["Все категории", "Криптовалюта", "Бизнес и стартапы", "Финансы и инвестиции", "Маркетинг и реклама", "Блоги / Эксперты", "Новостные каналы", "Юмор и развлечения", "Технологии и софт", "Образование и наука", "Кино и книги", "Музыка", "Спорт", "Мода и стиль", "Еда и кулинария", "Психология", "Ставки и беттинг"]
-GEOS_LIST = ["russia", "turkey", "india", "brazil", "usa", "uzbekistan", "kazakhstan", "belarus", "ukraine", "germany", "france", "indonesia", "united_arab_emirates"]
-LANGS_LIST = ["Все языки", "ru", "tr", "en", "hi", "pt", "uz", "kk", "be", "uk", "de", "fr", "id", "ar"]
-
-cat_map = {"Криптовалюта": "crypto", "Бизнес и стартапы": "business", "Финансы и инвестиции": "finance", "Маркетинг и реклама": "marketing", "Блоги / Эксперты": "blogs", "Новостные каналы": "news", "Юмор и развлечения": "humor", "Технологии и софт": "tech", "Образование и наука": "education", "Ставки и беттинг":
+                        "subs": int(item
