@@ -15,6 +15,7 @@ st.set_page_config(
     page_icon="🎯"
 )
 
+# Кастомные стили для темной темы админки
 st.markdown("""
     <style>
     .metric-box {
@@ -36,22 +37,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. КЛИЕНТ ДЛЯ РАБОТЫ С API TELEMETR.IO (ПОД ИСПРАВЛЕННУЮ ДОКУМЕНТАЦИЮ)
+# 2. КЛИЕНТ ДЛЯ РАБОТЫ С API TELEMETR.IO
 # =====================================================================
 class TelemetrProductionAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key.strip() if api_key else None
         self.base_url = "https://api.telemetr.io/v1"
         
-        # ИСПРАВЛЕНО: Строго по документации Telemetr передаем x-api-key
+        # Передаем авторизацию строго по документации Telemetr через x-api-key
         self.headers = {
             "accept": "application/json",
             "x-api-key": self.api_key if self.api_key else ""
         }
 
     def fetch_dictionaries(self):
-        """Возвращает справочники ГЕО (исправлено под формат API), языков и категорий"""
-        # ИСПРАВЛЕНО: ГЕО переведены на полные английские названия согласно ответам из доков (india, russia, etc.)
+        """Возвращает справочники ГЕО, языков и категорий"""
         return {
             "categories": ["Криптовалюта", "Бизнес и стартапы", "Финансы и инвестиции", "Ставки и беттинг", "Маркетинг и реклама", "Блоги / Эксперты", "Психология", "Новостные каналы"],
             "geos": ["Russia", "Turkey", "India", "Brazil", "USA", "Uzbekistan", "Kazakhstan"],
@@ -75,7 +75,6 @@ class TelemetrProductionAPI:
         api_category = category_mapping.get(category, "crypto")
 
         while page <= max_pages:
-            # ИСПРАВЛЕНО: дублируем параметры под разные версии поисковых эндпоинтов Telemetr для надежности
             query_params = {
                 "country_id": geo.lower(),
                 "geo": geo.lower(),
@@ -158,7 +157,7 @@ class TelemetrProductionAPI:
         ]
 
 # =====================================================================
-# 3. МОДУЛЬ ИИ И СКОРИНГА (ОСТАЛСЯ БЕЗ ИЗМЕНЕНИЙ)
+# 3. МОДУЛЬ ИСКУССТВЕННОГО ИНТЕЛЛЕКТА (GEMINI API)
 # =====================================================================
 def run_gemini_intelligence(title, about, posts, product_info, api_key):
     if not api_key:
@@ -178,6 +177,9 @@ def run_gemini_intelligence(title, about, posts, product_info, api_key):
     except:
         return {"score": "5", "verdict": "Ошибка обработки ИИ", "banner": "—"}
 
+# =====================================================================
+# 4. МАТЕМАТИЧЕСКИЙ СКОРИНГ
+# =====================================================================
 def compute_mathematical_tier(row, limit_views, limit_er):
     if float(row.get('er', 0.0)) >= 10.0 and int(row.get('views', 0)) >= (limit_views * 1.5):
         return "Good", "Высокий ER и отличный охват постов."
@@ -186,75 +188,5 @@ def compute_mathematical_tier(row, limit_views, limit_er):
     else:
         return "Bad", "Низкий ER или охваты. Подозрение на ботов."
 
-if "database_state" not in st.session_state:
-    st.session_state.database_state = None
-
-# --- ИНТЕРФЕЙС (САЙДБАР) ---
-with st.sidebar:
-    st.header("🔑 Конфигурация Доступов")
-    with st.expander("Ввод приватных API токенов", expanded=True):
-        input_telemetr_key = st.text_input("Telemetr API Токен", type="password")
-        input_gemini_key = st.text_input("Google Gemini API Токен", type="password")
-    
-    st.markdown("---")
-    st.header("🎯 Матрица Парсинга")
-    api_engine = TelemetrProductionAPI(input_telemetr_key)
-    schema_dicts = api_engine.fetch_dictionaries()
-    
-    ui_category = st.selectbox("Тематическая категория", schema_dicts["categories"])
-    ui_geo = st.selectbox("ГЕО-локация", ["Собрать все доступные ГЕО"] + schema_dicts["geos"])
-    ui_lang = st.selectbox("Язык каналов", ["Собрать все доступные языки"] + schema_dicts["languages"])
-    
-    st.markdown("---")
-    st.header("📊 Фильтры качества")
-    ui_min_subs = st.number_input("Подписчики от", value=5000, step=1000)
-    ui_min_views = st.number_input("Просмотры от", value=1000, step=500)
-    ui_min_er = st.slider("Минимальный ER %", min_value=0.0, max_value=100.0, value=5.0, step=0.5)
-
-    st.markdown("---")
-    st.header("🤖 Настройки Нейросети")
-    ui_ai_active = st.checkbox("Активировать ИИ-скоринг контента", value=False)
-    ui_product_desc = st.text_area("Описание вашего оффера:", value="Услуги по настройке Telegram Ads.")
-
-    st.markdown("---")
-    action_trigger = st.button("🚀 ЗАПУСТИТЬ АНАЛИЗ БАЗЫ", use_container_width=True, type="primary")
-
-# --- ГЛАВНЫЙ ЭКРАН ---
-st.title("🎯 Умный Сервис Подбора Таргетов Telegram Ads")
-
-if action_trigger:
-    with st.spinner("Запущен матричный сбор данных..."):
-        geos_matrix = schema_dicts["geos"] if ui_geo == "Собрать все доступные ГЕО" else [ui_geo]
-        langs_matrix = schema_dicts["languages"] if ui_lang == "Собрать все доступные языки" else [ui_lang]
-        
-        raw_aggregated_pool = []
-        for current_geo in geos_matrix:
-            for current_lang in langs_matrix:
-                batch_data = api_engine.execute_matrix_parsing(geo=current_geo, lang=current_lang, category=ui_category)
-                raw_aggregated_pool.extend(batch_data)
-                
-        if raw_aggregated_pool:
-            processing_df = pd.DataFrame(raw_aggregated_pool)
-            processing_df = processing_df.drop_duplicates(subset=["link"])
-            processing_df = processing_df[
-                (processing_df['subs'] >= ui_min_subs) & 
-                (processing_df['views'] >= ui_min_views) & 
-                (processing_df['er'] >= ui_min_er)
-            ]
-            
-            if not processing_df.empty:
-                tier_results = processing_df.apply(lambda row: compute_mathematical_tier(row, ui_min_views, ui_min_er), axis=1)
-                processing_df['Score'] = [t[0] for t in tier_results]
-                processing_df['Reason'] = [t[1] for t in tier_results]
-                
-                if ui_ai_active and input_gemini_key:
-                    ai_scores, ai_verdicts, ai_banners = [], [], []
-                    progress_ui_bar = st.progress(0, text="ИИ анализирует посты...")
-                    total_records = len(processing_df)
-                    
-                   for index, record in enumerate(processing_df.itertuples()):
-                        ai_data = run_gemini_intelligence(record.title, record.about, record.recent_posts, ui_product_desc, input_gemini_key)
-                        ai_scores.append(ai_data.get("score", "5"))
-                        ai_verdicts.append(ai_data.get("verdict", "—"))
-                        ai_banners.append(ai_data.get("banner", "—"))
-                        progress_ui_bar.progress((index + 1) / total_records, text=f"ИИ обработал: {index + 1}/{total_records}")
+# Инициализация состояния базы данных
+if "database_state" not in st.
