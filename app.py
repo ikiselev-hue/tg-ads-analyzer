@@ -15,7 +15,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Удобный разбитый словарь категорий для безопасного импорта
+# Словарь категорий (разбит на короткие строки)
 cat_map = {
     "Криптовалюта": "crypto",
     "Бизнес и стартапы": "business",
@@ -47,14 +47,17 @@ class TelemetrProductionAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key.strip() if api_key else None
         self.base_url = "https://api.telemetr.io/v1"
-        self.headers = {"accept": "application/json", "x-api-key": self.api_key if self.api_key else ""}
+        self.headers = {
+            "accept": "application/json", 
+            "x-api-key": self.api_key if self.api_key else ""
+        }
 
     def execute_parsing(self, params_dict: dict, max_pages: int = 2):
         if not self.api_key:
             time.sleep(0.1)
             return [
-                {"geo": params_dict.get("country", "russia"), "lang": "ru", "category": "Бизнес", "title": "🚀 Тестовый Мега-Канал", "link": "https://t.me/mock_1", "subs": 75000, "views": 12000, "er": 15.5, "growth_24h": 450, "ads_index": 82, "about": "Описание.", "recent_posts": "Посты канала."},
-                {"geo": params_dict.get("country", "russia"), "lang": "ru", "category": "Бизнес", "title": "💰 Тестовый Инсайд", "link": "https://t.me/mock_2", "subs": 120000, "views": 8500, "er": 6.2, "growth_24h": -120, "ads_index": 45, "about": "Аналитика ниши.", "recent_posts": "Рекламный контент."}
+                {"geo": "russia", "lang": "ru", "category": "Бизнес", "title": "🚀 Демо Канал 1", "link": "https://t.me/mock_1", "subs": 75000, "views": 12000, "er": 15.5, "growth_24h": 450, "ads_index": 82, "about": "Описание.", "recent_posts": "Посты канала."},
+                {"geo": "russia", "lang": "ru", "category": "Бизнес", "title": "💰 Демо Канал 2", "link": "https://t.me/mock_2", "subs": 120000, "views": 8500, "er": 6.2, "growth_24h": -120, "ads_index": 45, "about": "Аналитика ниши.", "recent_posts": "Рекламный контент."}
             ]
 
         collected_channels = []
@@ -65,7 +68,12 @@ class TelemetrProductionAPI:
             params_dict["page"] = page
             params_dict["limit"] = limit_per_page
             try:
-                response = requests.get(f"{self.base_url}/channels/search", headers=self.headers, params=params_dict, timeout=20)
+                response = requests.get(
+                    f"{self.base_url}/channels/search", 
+                    headers=self.headers, 
+                    params=params_dict, 
+                    timeout=20
+                )
                 if response.status_code != 200:
                     st.error(f"⛔️ Ошибка Telemetr ({response.status_code}): {response.text}")
                     break
@@ -82,10 +90,22 @@ class TelemetrProductionAPI:
                 if not items: break
                 
                 for item in items:
-                    collected_channels.append({
-                        "geo": params_dict.get("country", "—"),
-                        "lang": item.get("language") or item.get("lang") or "—",
-                        "category": item.get("category") or "—",
-                        "title": item.get("title", "Без названия"),
-                        "link": item.get("link") or f"https://t.me/{item.get('username', '')}",
-                        "subs": int(item
+                    # УЛЬТРА-КОРОТКОЕ ИЗВЛЕЧЕНИЕ ДАННЫХ (Защита от обрезки строк)
+                    ch_geo = params_dict.get("country", "—")
+                    ch_lang = item.get("language") or item.get("lang") or "—"
+                    ch_cat = item.get("category") or "—"
+                    ch_title = item.get("title", "Без названия")
+                    
+                    ch_username = item.get('username', '')
+                    ch_link = item.get("link") or f"https://t.me/{ch_username}"
+                    
+                    v_subs = item.get("participants_count") or item.get("subs", 0)
+                    ch_subs = int(v_subs)
+                    
+                    v_views = item.get("views_per_post") or item.get("views", 0)
+                    ch_views = int(v_views)
+                    
+                    v_er = item.get("er") or 0.0
+                    ch_er = float(v_er)
+                    
+                    v_growth = item.get("growth_24h")
