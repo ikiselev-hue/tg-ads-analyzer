@@ -37,14 +37,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. КЛИЕНТ ДЛЯ РАБОТЫ С API TELEMETR.IO
+# 2. УМНЫЙ КЛИЕНТ ДЛЯ API TELEMETR.IO С АВТОДИАГНОСТИКОЙ
 # =====================================================================
 class TelemetrProductionAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key.strip() if api_key else None
         self.base_url = "https://api.telemetr.io/v1"
         
-        # Авторизация по официальной документации Telemetr через x-api-key
+        # Авторизация по официальной спецификации x-api-key
         self.headers = {
             "accept": "application/json",
             "x-api-key": self.api_key if self.api_key else ""
@@ -75,6 +75,7 @@ class TelemetrProductionAPI:
         api_category = category_mapping.get(category, "crypto")
 
         while page <= max_pages:
+            # Отправляем параметры в разных вариациях (поддержка старых и новых версий API Telemetr)
             query_params = {
                 "country_id": geo.lower(),
                 "geo": geo.lower(),
@@ -100,10 +101,28 @@ class TelemetrProductionAPI:
                     st.sidebar.error("❌ Ошибка авторизации: Проверьте ваш x-api-key!")
                     break
                 elif response.status_code != 200:
+                    st.sidebar.warning(f"Сервер Telemetr вернул код ответа: {response.status_code}")
                     break
                 
                 payload = response.json()
-                items = payload.get("channels", [])
+                
+                # --- УМНЫЙ ПАРСИНГ ОТВЕТА (Автоопределение структуры JSON) ---
+                items = []
+                if isinstance(payload, list):
+                    items = payload
+                elif isinstance(payload, dict):
+                    if "channels" in payload:
+                        items = payload["channels"]
+                    elif "data" in payload:
+                        items = payload["data"]
+                    elif "items" in payload:
+                        items = payload["items"]
+                    elif "result" in payload:
+                        items = payload["result"]
+                    else:
+                        # Показываем структуру, если ключи внутри ответа изменились
+                        st.sidebar.info(f"Диагностика API: Обнаружены ключи {list(payload.keys())}")
+                        items = []
                 
                 if not items:
                     break
@@ -191,6 +210,8 @@ def compute_mathematical_tier(row, limit_views, limit_er):
 # Инициализация состояния базы данных в сессии пользователя
 if "database_state" not in st.session_state:
     st.session_state.database_state = None
+if "diagnostic_info" not in st.session_state:
+    st.session_state.diagnostic_info = ""
 
 # --- ИНТЕРФЕЙС ПАНЕЛИ УПРАВЛЕНИЯ (САЙДБАР) ---
 with st.sidebar:
@@ -220,106 +241,4 @@ with st.sidebar:
     ui_product_desc = st.text_area("Описание вашего оффера:", value="Услуги по настройке Telegram Ads.")
 
     st.markdown("---")
-    action_trigger = st.button("🚀 ЗАПУСТИТЬ АНАЛИЗ БАЗЫ", use_container_width=True, type="primary")
-
-# --- ГЛАВНЫЙ ЭКРАН СЕРВИСА ---
-st.title("🎯 Умный Сервис Подбора Таргетов Telegram Ads")
-
-if action_trigger:
-    with st.spinner("Запущен матричный сбор данных..."):
-        geos_matrix = schema_dicts["geos"] if ui_geo == "Собрать все доступные ГЕО" else [ui_geo]
-        langs_matrix = schema_dicts["languages"] if ui_lang == "Собрать все доступные языки" else [ui_lang]
-        
-        raw_aggregated_pool = []
-        for current_geo in geos_matrix:
-            for current_lang in langs_matrix:
-                batch_data = api_engine.execute_matrix_parsing(geo=current_geo, lang=current_lang, category=ui_category)
-                raw_aggregated_pool.extend(batch_data)
-                
-        if raw_aggregated_pool:
-            processing_df = pd.DataFrame(raw_aggregated_pool)
-            processing_df = processing_df.drop_duplicates(subset=["link"])
-            processing_df = processing_df[
-                (processing_df['subs'] >= ui_min_subs) & 
-                (processing_df['views'] >= ui_min_views) & 
-                (processing_df['er'] >= ui_min_er)
-            ]
-            
-            if not processing_df.empty:
-                tier_results = processing_df.apply(lambda row: compute_mathematical_tier(row, ui_min_views, ui_min_er), axis=1)
-                processing_df['Score'] = [t[0] for t in tier_results]
-                processing_df['Reason'] = [t[1] for t in tier_results]
-                
-                # Полноценный ИИ-блок анализа постов
-                if ui_ai_active and input_gemini_key:
-                    ai_scores, ai_verdicts, ai_banners = [], [], []
-                    progress_ui_bar = st.progress(0, text="ИИ анализирует посты...")
-                    total_records = len(processing_df)
-                    
-                    for index, record in enumerate(processing_df.itertuples()):
-                        ai_data = run_gemini_intelligence(record.title, record.about, record.recent_posts, ui_product_desc, input_gemini_key)
-                        ai_scores.append(ai_data.get("score", "5"))
-                        ai_verdicts.append(ai_data.get("verdict", "—"))
-                        ai_banners.append(ai_data.get("banner", "—"))
-                        progress_ui_bar.progress((index + 1) / total_records, text=f"ИИ обработал: {index + 1}/{total_records}")
-                    
-                    processing_df['AI Relevance'] = ai_scores
-                    processing_df['AI Content Review'] = ai_verdicts
-                    processing_df['AI Telegram Ads Banner'] = ai_banners
-                    progress_ui_bar.empty()
-                else:
-                    processing_df['AI Relevance'] = "Выключен"
-                    processing_df['AI Content Review'] = "Включите ИИ в меню слева"
-                    processing_df['AI Telegram Ads Banner'] = "—"
-                
-                st.session_state.database_state = processing_df
-            else:
-                st.session_state.database_state = pd.DataFrame()
-        else:
-            st.session_state.database_state = pd.DataFrame()
-
-# ОТРИСОВКА ИНТЕРФЕЙСА ТАБЛИЦЫ И ЭКСПОРТА
-if st.session_state.database_state is not None:
-    active_working_df = st.session_state.database_state.copy()
-    
-    if active_working_df.empty:
-        st.warning("⚠️ По указанной комбинации параметров каналов не найдено. Попробуйте снизить пороговые фильтры.")
-    else:
-        count_total = len(active_working_df)
-        count_good = len(active_working_df[active_working_df['Score'] == "Good"])
-        count_medium = len(active_working_df[active_working_df['Score'] == "Medium"])
-        count_bad = len(active_working_df[active_working_df['Score'] == "Bad"])
-        
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        with col_m1: st.markdown(f"<div class='metric-box'>🛑 Найдено таргетов<br><h2>{count_total}</h2></div>", unsafe_allow_html=True)
-        with col_m2: st.markdown(f"<div class='metric-box'>🟢 Хороших (Good)<br><h2>{count_good}</h2></div>", unsafe_allow_html=True)
-        with col_m3: st.markdown(f"<div class='metric-box'>🟡 Средних (Medium)<br><h2>{count_medium}</h2></div>", unsafe_allow_html=True)
-        with col_m4: st.markdown(f"<div class='metric-box'>🔴 Рискованных (Bad)<br><h2>{count_bad}</h2></div>", unsafe_allow_html=True)
-            
-        st.markdown("---")
-        
-        layout_col1, layout_col2, layout_col3 = st.columns([2, 1, 1])
-        with layout_col1:
-            live_search_query = st.text_input("🔍 Быстрый фильтр по ключевому слову:", "")
-            if live_search_query:
-                active_working_df = active_working_df[active_working_df['title'].str.contains(live_search_query, case=False)]
-                
-        with layout_col2:
-            st.download_button(label="📥 Экспорт в CSV", data=active_working_df.to_csv(index=False).encode('utf-8'), file_name="tg_ads_target.csv", mime="text/csv", use_container_width=True)
-        with layout_col3:
-            excel_memory_buffer = BytesIO()
-            with pd.ExcelWriter(excel_memory_buffer, engine='openpyxl') as excel_writer:
-                active_working_df.to_excel(excel_writer, index=False, sheet_name='Таргеты')
-            st.download_button(label="📥 Экспорт в Excel", data=excel_memory_buffer.getvalue(), file_name="tg_ads_target.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-            
-        st.dataframe(
-            active_working_df,
-            column_config={
-                "geo": st.column_config.TextColumn("ГЕО"), "lang": st.column_config.TextColumn("Язык"), "category": st.column_config.TextColumn("Категория"),
-                "title": st.column_config.TextColumn("Название Telegram-канала"), "link": st.column_config.LinkColumn("Ссылка (t.me)"),
-                "subs": st.column_config.NumberColumn("Подписчики", format="%d"), "views": st.column_config.NumberColumn("Просмотры", format="%d"), "er": st.column_config.NumberColumn("ER (%)", format="%.2f%%"),
-                "Score": st.column_config.SelectboxColumn("Оценка Системы", options=["Good", "Medium", "Bad"]), "Reason": st.column_config.TextColumn("Техническое Обоснование"),
-                "AI Relevance": st.column_config.TextColumn("ИИ Релевантность (1-10)"), "AI Content Review": st.column_config.TextColumn("Смысловой ИИ-Анализ"), "AI Telegram Ads Banner": st.column_config.TextColumn("ИИ Креатив (до 160 симв.)")
-            },
-            hide_index=True, use_container_width=True
-        )
+    action_trigger = st.button("🚀 ЗАПУСТИТЬ АНАЛИЗ Б
