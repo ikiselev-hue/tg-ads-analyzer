@@ -6,21 +6,29 @@ import json
 import google.generativeai as genai
 from io import BytesIO
 
+# 1. НАСТРОЙКА СТРАНИЦЫ
 st.set_page_config(
     layout="wide", 
-    page_title="Telemetr PRO"
+    page_title="Telemetr PRO Analyzer"
 )
 
-# Компактный дизайн карточек
+# Кастомные стили метрик
 st.markdown(
-    "<style>.metric-box { background-color: #1e222b; "
-    "padding: 15px; border-radius: 8px; "
-    "border: 1px solid #2d3139; "
-    "text-align: center; }</style>", 
+    """
+    <style>
+    .metric-box { 
+        background-color: #1e222b; 
+        padding: 15px; 
+        border-radius: 8px; 
+        border: 1px solid #2d3139; 
+        text-align: center; 
+    }
+    </style>
+    """, 
     unsafe_allow_html=True
 )
 
-# Справочник категорий Telemetr
+# 2. СПРАВОЧНИКИ И НАСТРОЙКИ
 cat_map = {
     "Криптовалюта": "crypto",
     "Бизнес и стартапы": "business",
@@ -37,17 +45,23 @@ cat_map = {
 
 GEOS_LIST = [
     "russia", "turkey", "india", "brazil", 
-    "usa", "uzbekistan", "kazakhstan"
+    "usa", "uzbekistan", "kazakhstan", 
+    "belarus", "ukraine"
 ]
 
 LANGS_LIST = [
     "Все языки", "ru", "tr", "en", "hi", 
-    "pt", "uz", "kk"
+    "pt", "uz", "kk", "be", "uk"
 ]
 
+# 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 def run_gemini(title, about, posts, product, key):
     if not key: 
-        return {"score": "5", "verdict": "Демо", "banner": "—"}
+        return {
+            "score": "5", 
+            "verdict": "Демо-режим", 
+            "banner": "—"
+        }
     try:
         genai.configure(api_key=key.strip())
         prompt = (
@@ -62,19 +76,41 @@ def run_gemini(title, about, posts, product, key):
         clean = clean.replace("```", "").strip()
         return json.loads(clean)
     except: 
-        return {"score": "5", "verdict": "Ошибка ИИ", "banner": "—"}
+        return {
+            "score": "5", 
+            "verdict": "Ошибка ИИ", 
+            "banner": "—"
+        }
 
+def compute_score(row):
+    er = row.get("er", 0.0)
+    views = row.get("views", 0)
+    if er >= 10.0 and views >= 5000:
+        return "Good"
+    if er >= 4.0:
+        return "Medium"
+    return "Bad"
+
+def compute_reason(row):
+    score = row.get("Score")
+    if score == "Good":
+        return "Отличные охваты и вовлеченность"
+    if score == "Medium":
+        return "Стабильные средние показатели"
+    return "Низкий ER. Риск накрутки контента"
+
+# Инициализация состояния
 if "database_state" not in st.session_state: 
     st.session_state.database_state = None
 
-# --- ПОЛНОСТЬЮ ПЛОСКИЙ ИНТЕРФЕЙС САЙДБАРА ---
+# 4. ИНТЕРФЕЙС ПАНЕЛИ УПРАВЛЕНИЯ
 t_key = st.sidebar.text_input("Telemetr Token", type="password")
 g_key = st.sidebar.text_input("Gemini Token", type="password")
 ui_term = st.sidebar.text_input("Ключевое слово (term)")
 
 st.sidebar.markdown("---")
 ui_geo = st.sidebar.selectbox("Страна (country)", GEOS_LIST)
-ui_cat = st.sidebar.selectbox("Категория (category)", ["Все категории"] + list(cat_map.keys()))
+ui_cat = st.sidebar.selectbox("Категория", ["Все категории"] + list(cat_map.keys()))
 ui_lang = st.sidebar.selectbox("Язык (language)", LANGS_LIST)
 ui_max_ch = st.sidebar.selectbox("Макс каналов", [20, 40, 60, 100], index=1)
 
@@ -100,10 +136,9 @@ action = st.sidebar.button("🚀 ЗАПУСТИТЬ АНАЛИЗ", type="primary
 
 st.title("🎯 Умный Сервис Подбора Таргетов Telegram Ads")
 
-# --- СБОРКА И ПАРСИНГ ПАРАМЕТРОВ ---
+# 5. СБОР И ФИЛЬТРАЦИЯ ДАННЫХ
 if action:
-    p = {}
-    p["country"] = ui_geo.lower()
+    p = {"country": ui_geo.lower()}
     
     if ui_term.strip(): 
         p["term"] = ui_term.strip()
@@ -123,22 +158,19 @@ if action:
 
     res = []
     if not t_key.strip():
-        # Плоские демо-данные без риска обрезки строк
-        d1 = {"geo": ui_geo, "lang": "ru", "category": "Бизнес"}
-        d1["title"] = "🚀 Демо Канал 1"
-        d1["link"] = "https://t.me/mock_1"
-        d1["subs"], d1["views"], d1["er"] = 75000, 12000, 15.5
-        d1["growth_24h"], d1["ads_index"] = 450, 82
-        d1["about"], d1["recent_posts"] = "Тест", "Посты"
-        res.append(d1)
-        
-        d2 = {"geo": ui_geo, "lang": "ru", "category": "Бизнес"}
-        d2["title"] = "💰 Демо Канал 2"
-        d2["link"] = "https://t.me/mock_2"
-        d2["subs"], d2["views"], d2["er"] = 120000, 8500, 6.2
-        d2["growth_24h"], d2["ads_index"] = -120, 45
-        d2["about"], d2["recent_posts"] = "Тест", "Посты"
-        res.append(d2)
+        # Генерация чистых демонстрационных данных
+        for idx in range(1, 6):
+            res.append({
+                "geo": ui_geo, "lang": "ru", "category": "Бизнес",
+                "title": f"🚀 Демо Канал {idx}", 
+                "link": f"https://t.me/mock_channel_{idx}",
+                "subs": 50000 + (idx * 10000), 
+                "views": 4000 + (idx * 500), 
+                "er": 3.5 + (idx * 1.5),
+                "growth_24h": 150 * idx, "ads_index": 12 * idx,
+                "about": "Описание тестового канала для проверки ИИ",
+                "recent_posts": "Пост про маркетинг и закупки трафика."
+            })
     else:
         try:
             url = "https://api.telemetr.io/v1/channels/search"
@@ -147,7 +179,7 @@ if action:
             
             for current_page in range(1, pages + 1):
                 p["page"] = current_page
-                p["limit"] = 20
+                p["limit"] = 20  # Жесткий безопасный лимит Telemetr
                 r = requests.get(url, headers=h, params=p, timeout=20)
                 
                 if r.status_code != 200:
@@ -165,56 +197,61 @@ if action:
                     p_text = [ps.get("text", "") for ps in p_list]
                     r_posts = " | ".join(p_text) or "—"
                     
-                    row = {}
-                    row["geo"] = ui_geo
-                    row["lang"] = r_lang
-                    row["category"] = i.get("category") or "—"
-                    row["title"] = i.get("title", "Без названия")
-                    row["link"] = i.get("link") or f"https://t.me/{i.get('username','')}"
-                    row["subs"] = int(i.get("participants_count") or i.get("subs", 0))
-                    row["views"] = int(i.get("views_per_post") or i.get("views", 0))
-                    row["er"] = float(i.get("er") or 0.0)
-                    row["growth_24h"] = int(i.get("growth_24h") or i.get("growth", 0))
-                    row["ads_index"] = int(i.get("ads_index") or i.get("members_ads_count", 0))
-                    row["about"] = i.get("about", "—")
-                    row["recent_posts"] = r_posts
+                    row = {
+                        "geo": ui_geo,
+                        "lang": r_lang,
+                        "category": i.get("category") or "—",
+                        "title": i.get("title", "Без названия"),
+                        "link": i.get("link") or f"https://t.me/{i.get('username','')}",
+                        "subs": int(i.get("participants_count") or i.get("subs", 0)),
+                        "views": int(i.get("views_per_post") or i.get("views", 0)),
+                        "er": float(i.get("er") or 0.0),
+                        "growth_24h": int(i.get("growth_24h") or i.get("growth", 0)),
+                        "ads_index": int(i.get("ads_index") or i.get("members_ads_count", 0)),
+                        "about": i.get("about", "—"),
+                        "recent_posts": r_posts
+                    }
                     res.append(row)
                     
                 if len(items) < 20: 
                     break
                 time.sleep(0.6)
         except Exception as e: 
-            st.error(f"💥 Ошибка: {str(e)}")
+            st.error(f"💥 Ошибка сбора данных: {str(e)}")
 
     if res:
         df = pd.DataFrame(res).drop_duplicates(subset=["link"])
-        df['Score'] = df.apply(lambda r: "Good" if r['er'] >= 10.0 and r['views'] >= 5000 else ("Medium" if r['er'] >= 4.0 else "Bad"), axis=1)
-        df['Reason'] = df.apply(lambda r: "Отличные показатели" if r['Score'] == "Good" else "Стабильные показатели", axis=1)
+        df['Score'] = df.apply(compute_score, axis=1)
+        df['Reason'] = df.apply(compute_reason, axis=1)
         
         if ui_ai and g_key.strip():
             sc, vd, bn = [], [], []
-            p_bar = st.progress(0, text="ИИ работает...")
+            p_bar = st.progress(0, text="ИИ анализирует контент постов...")
+            total_items = len(df)
+            
             for idx, rec in enumerate(df.itertuples()):
                 ai = run_gemini(rec.title, rec.about, rec.recent_posts, ui_prod, g_key)
                 sc.append(ai.get("score", "5"))
                 vd.append(ai.get("verdict", "—"))
                 bn.append(ai.get("banner", "—"))
-                p_bar.progress((idx + 1) / len(df))
-            df['AI Relevance'], df['AI Content Review'], df['AI Telegram Ads Banner'] = sc, vd, bn
+                p_bar.progress((idx + 1) / total_items)
+            df['AI Relevance'] = sc
+            df['AI Content Review'] = vd
+            df['AI Telegram Ads Banner'] = bn
             p_bar.empty()
         else: 
             df['AI Relevance'] = "Выключен"
-            df['AI Content Review'] = "Включите ИИ"
+            df['AI Content Review'] = "Включите ИИ в меню слева"
             df['AI Telegram Ads Banner'] = "—"
         st.session_state.database_state = df
     else: 
         st.session_state.database_state = pd.DataFrame()
 
-# --- ОТРИСОВКА ИНТЕРФЕЙСА ТАБЛИЦЫ ---
-if st.session_state.database_state not in [None]:
+# 6.ОТРИСОВКА ИНТЕРФЕЙСА ТАБЛИЦЫ И ЭКСПОРТА
+if st.session_state.database_state is not None:
     df_act = st.session_state.database_state.copy()
     if df_act.empty: 
-        st.warning("⚠️ Каналов не найдено. Измените диапазоны фильтров.")
+        st.warning("⚠️ Каналов не найдено. Попробуйте расширить диапазоны фильтров.")
     else:
         t_len = len(df_act)
         g_len = len(df_act[df_act['Score'] == 'Good'])
@@ -233,11 +270,24 @@ if st.session_state.database_state not in [None]:
         if q: 
             df_act = df_act[df_act['title'].str.contains(q, case=False)]
             
-        l2.download_button("📥 Экспорт CSV", df_act.to_csv(index=False).encode('utf-8'), "target.csv", "text/csv", use_container_width=True)
+        l2.download_button(
+            label="📥 Экспорт CSV", 
+            data=df_act.to_csv(index=False).encode('utf-8'), 
+            file_name="target.csv", 
+            mime="text/csv", 
+            use_container_width=True
+        )
+        
         buf = BytesIO()
         with pd.ExcelWriter(buf, engine='openpyxl') as w: 
             df_act.to_excel(w, index=False)
-        l3.download_button("📥 Экспорт Excel", buf.getvalue(), "target.xlsx", use_container_width=True)
+            
+        l3.download_button(
+            label="📥 Экспорт Excel", 
+            data=buf.getvalue(), 
+            file_name="target.xlsx", 
+            use_container_width=True
+        )
         
         st.dataframe(
             df_act, 
@@ -246,17 +296,17 @@ if st.session_state.database_state not in [None]:
                 "lang": st.column_config.TextColumn("Язык"),
                 "category": st.column_config.TextColumn("Категория"),
                 "title": st.column_config.TextColumn("Название канала"),
-                "link": st.column_config.LinkColumn("Ссылка (t.me)"),
+                "link": st.column_config.LinkColumn("Ссылка"),
                 "subs": st.column_config.NumberColumn("Подписчики", format="%d"),
                 "views": st.column_config.NumberColumn("Просмотры", format="%d"),
                 "er": st.column_config.NumberColumn("ER (%)", format="%.2f%%"),
                 "growth_24h": st.column_config.NumberColumn("Прирост 24ч", format="%d"),
                 "ads_index": st.column_config.NumberColumn("Ads Index", format="%d"),
-                "Score": st.column_config.SelectboxColumn("Оценка Системы", options=["Good", "Medium", "Bad"]),
-                "Reason": st.column_config.TextColumn("Техническое Обоснование"),
-                "AI Relevance": st.column_config.TextColumn("ИИ Релевантность (1-10)"),
-                "AI Content Review": st.column_config.TextColumn("Смысловой ИИ-Анализ"),
-                "AI Telegram Ads Banner": st.column_config.TextColumn("ИИ Креатив")
+                "Score": st.column_config.SelectboxColumn("Оценка", options=["Good", "Medium", "Bad"]),
+                "Reason": st.column_config.TextColumn("Обоснование"),
+                "AI Relevance": st.column_config.TextColumn("Релевантность (1-10)"),
+                "AI Content Review": st.column_config.TextColumn("ИИ-Анализ"),
+                "AI Telegram Ads Banner": st.column_config.TextColumn("ИИ-Объявление")
             },
             hide_index=True, 
             use_container_width=True
