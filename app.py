@@ -200,5 +200,37 @@ if st.session_state.database_state is not None:
     if df_act.empty:
         st.warning("⚠️ Каналов не найдено. Снизьте фильтры подписчиков, просмотров или ER.")
     else:
+        total_len = len(df_act)
+        good_len = len(df_act[df_act['Score'] == 'Good'])
+        med_len = len(df_act[df_act['Score'] == 'Medium'])
+        bad_len = len(df_act[df_act['Score'] == 'Bad'])
+
         c1, c2, c3, c4 = st.columns(4)
-        with c1: st.markdown(f"<div class='metric-box'>🛑 Всего таргетов<br><h2>{len(df_act
+        with c1: st.markdown(f"<div class='metric-box'>🛑 Всего таргетов<br><h2>{total_len}</h2></div>", unsafe_allow_html=True)
+        with c2: st.markdown(f"<div class='metric-box'>🟢 Хороших (Good)<br><h2>{good_len}</h2></div>", unsafe_allow_html=True)
+        with c3: st.markdown(f"<div class='metric-box'>🟡 Средних (Medium)<br><h2>{med_len}</h2></div>", unsafe_allow_html=True)
+        with c4: st.markdown(f"<div class='metric-box'>🔴 Рискованных (Bad)<br><h2>{bad_len}</h2></div>", unsafe_allow_html=True)
+            
+        st.markdown("---")
+        l1, l2, l3 = st.columns([2, 1, 1])
+        with l1:
+            query = st.text_input("🔍 Быстрый фильтр по названию:", "")
+            if query: df_act = df_act[df_act['title'].str.contains(query, case=False)]
+        with l2:
+            st.download_button(label="📥 Экспорт в CSV", data=df_act.to_csv(index=False).encode('utf-8'), file_name="target.csv", mime="text/csv", use_container_width=True)
+        with l3:
+            buf = BytesIO()
+            with pd.ExcelWriter(buf, engine='openpyxl') as w: df_act.to_excel(w, index=False, sheet_name='Таргеты')
+            st.download_button(label="📥 Экспорт в Excel", data=buf.getvalue(), file_name="target.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            
+        st.dataframe(
+            df_act,
+            column_config={
+                "geo": st.column_config.TextColumn("ГЕО"), "lang": st.column_config.TextColumn("Язык"), "category": st.column_config.TextColumn("Категория"),
+                "title": st.column_config.TextColumn("Название канала"), "link": st.column_config.LinkColumn("Ссылка (t.me)"),
+                "subs": st.column_config.NumberColumn("Подписчики", format="%d"), "views": st.column_config.NumberColumn("Просмотры", format="%d"), "er": st.column_config.NumberColumn("ER (%)", format="%.2f%%"),
+                "Score": st.column_config.SelectboxColumn("Оценка Системы", options=["Good", "Medium", "Bad"]), "Reason": st.column_config.TextColumn("Техническое Обоснование"),
+                "AI Relevance": st.column_config.TextColumn("ИИ Релевантность (1-10)"), "AI Content Review": st.column_config.TextColumn("Смысловой ИИ-Анализ"), "AI Telegram Ads Banner": st.column_config.TextColumn("ИИ Креатив")
+            },
+            hide_index=True, use_container_width=True
+        )
