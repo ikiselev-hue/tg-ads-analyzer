@@ -21,53 +21,60 @@ class TelemetrProductionAPI:
         self.base_url = "https://api.telemetr.io/v1"
         self.headers = {"accept": "application/json", "x-api-key": self.api_key if self.api_key else ""}
 
-    def fetch_dictionaries(self):
-        return {
-            "categories": ["Криптовалюта", "Бизнес и стартапы", "Финансы и инвестиции", "Ставки и беттинг", "Маркетинг и реклама", "Блоги / Эксперты", "Психология", "Новостные каналы"],
-            "geos": ["Russia", "Turkey", "India", "Brazil", "USA", "Uzbekistan", "Kazakhstan"],
-            "languages": ["ru", "tr", "hi", "pt", "en", "uz", "kk"]
-        }
-
-    def execute_matrix_parsing(self, geo: str, lang: str, category: str, max_pages: int = 3):
+    def execute_parsing(self, geo: str, lang: str, category: str, max_pages: int = 2):
         if not self.api_key:
-            return self._execute_mock_simulation(geo, lang, category)
+            time.sleep(0.1)
+            return [
+                {"geo": geo, "lang": lang, "category": category, "title": "🚀 Демо Канал Рекламы", "link": "https://t.me/mock_1", "subs": 45000, "views": 8000, "er": 14.5, "about": "Тестовое описание канала.", "recent_posts": "Пост 1. Пост 2."},
+                {"geo": geo, "lang": lang, "category": category, "title": "💰 Демо Инсайды Бизнеса", "link": "https://t.me/mock_2", "subs": 85000, "views": 9000, "er": 8.2, "about": "Аналитика ниши рекламы.", "recent_posts": "Кейс по таргету."}
+            ]
 
         collected_channels = []
         page = 1
-        limit_per_page = 50
+        limit_per_page = 20
+        
         cat_map = {
             "Криптовалюта": "crypto", "Бизнес и стартапы": "business", "Финансы и инвестиции": "finance",
             "Ставки и беттинг": "betting", "Маркетинг и реклама": "marketing", "Блоги / Эксперты": "blogs",
             "Психология": "psychology", "Новостные каналы": "news"
         }
-        api_category = cat_map.get(category, "crypto")
+        
+        # Строим параметры запроса динамически (только то, что выбрал пользователь)
+        query_params = {"page": page, "limit": limit_per_page}
+        
+        if category != "Все категории":
+            query_params["category"] = cat_map.get(category, "crypto")
+        if geo != "Все ГЕО":
+            query_params["geo"] = geo.lower()
+        if lang != "Все языки":
+            query_params["language"] = lang.lower()
 
         while page <= max_pages:
-            query_params = {
-                "country_id": geo.lower(), "geo": geo.lower(), "lang": lang.lower(),
-                "language": lang.lower(), "category": api_category, "page": page, "limit": limit_per_page
-            }
+            query_params["page"] = page
             try:
+                # Отправляем запрос на эндпоинт поиска
                 response = requests.get(f"{self.base_url}/channels/search", headers=self.headers, params=query_params, timeout=20)
-                if response.status_code == 429:
-                    time.sleep(4)
-                    continue
-                elif response.status_code == 401:
-                    st.sidebar.error("❌ Неверный API ключ Telemetr.io")
-                    break
-                elif response.status_code != 200:
+                
+                # Если сервер вернул не 200 OK — мгновенно выводим причину на экран
+                if response.status_code != 200:
+                    st.error(f"⛔️ Сигнал от Telemetr (Код {response.status_code}): {response.text}")
                     break
                 
                 payload = response.json()
                 items = []
-                if isinstance(payload, list): items = payload
+                
+                if isinstance(payload, list): 
+                    items = payload
                 elif isinstance(payload, dict):
                     for k in ["channels", "data", "items", "result"]:
                         if k in payload:
                             items = payload[k]
                             break
+                    if not items and page == 1:
+                        st.info(f"ℹ️ Технический ответ сервера для отладки: {payload}")
                 
-                if not items: break
+                if not items: 
+                    break
                 
                 for item in items:
                     collected_channels.append({
@@ -80,19 +87,16 @@ class TelemetrProductionAPI:
                         "about": item.get("about", "Описание отсутствует"),
                         "recent_posts": " | ".join([p.get("text", "") for p in item.get("recent_posts", [])[:3]]) or "Контент недоступен"
                     })
-                if len(items) < limit_per_page: break
+                
+                if len(items) < limit_per_page: 
+                    break
                 page += 1
                 time.sleep(0.5)
-            except:
+            except Exception as e:
+                st.error(f"💥 Ошибка на стороне кода при запросе: {str(e)}")
                 break
+                
         return collected_channels
-
-    def _execute_mock_simulation(self, geo, lang, category):
-        time.sleep(0.1)
-        return [
-            {"geo": geo, "lang": lang, "category": category, "title": f"🚀 {category} | Channel {geo}", "link": f"https://t.me/mock_1", "subs": 45000, "views": 8000, "er": 14.5, "about": "Блог эксперта.", "recent_posts": "Пост 1. Пост 2."},
-            {"geo": geo, "lang": lang, "category": category, "title": f"💰 Инсайды [{category}]", "link": f"https://t.me/mock_2", "subs": 85000, "views": 9000, "er": 8.2, "about": "Аналитика ниши.", "recent_posts": "Кейс по таргету."}
-        ]
 
 def run_gemini_intelligence(title, about, posts, product_info, api_key):
     if not api_key: return {"score": "5", "verdict": "Демо-режим", "banner": "—"}
@@ -112,7 +116,6 @@ def compute_mathematical_tier(row, limit_views, limit_er):
     return "Bad", "Низкие показатели."
 
 if "database_state" not in st.session_state: st.session_state.database_state = None
-if "diagnostic_info" not in st.session_state: st.session_state.diagnostic_info = ""
 
 with st.sidebar:
     st.header("🔑 Доступы")
@@ -123,16 +126,15 @@ with st.sidebar:
     st.markdown("---")
     st.header("🎯 Настройки")
     api_engine = TelemetrProductionAPI(input_telemetr_key)
-    schema_dicts = api_engine.fetch_dictionaries()
     
-    ui_category = st.selectbox("Категория", schema_dicts["categories"])
-    ui_geo = st.selectbox("ГЕО", ["Собрать все доступные ГЕО"] + schema_dicts["geos"])
-    ui_lang = st.selectbox("Язык", ["Собрать все доступные языки"] + schema_dicts["languages"])
+    ui_category = st.selectbox("Категория", ["Все категории", "Криптовалюта", "Бизнес и стартапы", "Финансы и инвестиции", "Ставки и беттинг", "Маркетинг и реклама", "Блоги / Эксперты", "Психология", "Новостные каналы"])
+    ui_geo = st.selectbox("ГЕО", ["Все ГЕО", "russia", "turkey", "india", "brazil", "usa", "uzbekistan", "kazakhstan"])
+    ui_lang = st.selectbox("Язык", ["Все языки", "ru", "tr", "en", "uz", "kk"])
     
     st.markdown("---")
-    ui_min_subs = st.number_input("Подписчики от", value=5000, step=1000)
-    ui_min_views = st.number_input("Просмотры от", value=1000, step=500)
-    ui_min_er = st.slider("Минимальный ER %", min_value=0.0, max_value=100.0, value=5.0, step=0.5)
+    ui_min_subs = st.number_input("Подписчики от", value=100, step=100) # Опустили планку для теста
+    ui_min_views = st.number_input("Просмотры от", value=10, step=10)   # Опустили планку для теста
+    ui_min_er = st.slider("Минимальный ER %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
 
     st.markdown("---")
     ui_ai_active = st.checkbox("Включить ИИ-анализ контента", value=False)
@@ -144,19 +146,11 @@ with st.sidebar:
 st.title("🎯 Умный Сервис Подбора Таргетов Telegram Ads")
 
 if action_trigger:
-    st.session_state.diagnostic_info = ""
-    with st.spinner("Сбор данных..."):
-        geos_matrix = schema_dicts["geos"] if ui_geo == "Собрать все доступные ГЕО" else [ui_geo]
-        langs_matrix = schema_dicts["languages"] if ui_lang == "Собрать все доступные языки" else [ui_lang]
-        
-        raw_pool = []
-        for cg in geos_matrix:
-            for cl in langs_matrix:
-                raw_pool.extend(api_engine.execute_matrix_parsing(geo=cg, lang=cl, category=ui_category))
+    with st.spinner("Связь с сервером Telemetr..."):
+        raw_pool = api_engine.execute_parsing(geo=ui_geo, lang=ui_lang, category=ui_category)
                 
         if raw_pool:
             processing_df = pd.DataFrame(raw_pool).drop_duplicates(subset=["link"])
-            st.session_state.diagnostic_info = f"🔌 Диагностика: Из Telemetr загружено {len(processing_df)} каналов. Фильтруем..."
             
             processing_df = processing_df[
                 (processing_df['subs'] >= ui_min_subs) & (processing_df['views'] >= ui_min_views) & (processing_df['er'] >= ui_min_er)
@@ -190,15 +184,11 @@ if action_trigger:
                 st.session_state.database_state = pd.DataFrame()
         else:
             st.session_state.database_state = pd.DataFrame()
-            st.session_state.diagnostic_info = "🔌 Диагностика: Сервер Telemetr вернул пустой список. Проверьте ГЕО/ключ."
-
-if st.session_state.diagnostic_info:
-    st.info(st.session_state.diagnostic_info)
 
 if st.session_state.database_state is not None:
     df_act = st.session_state.database_state.copy()
     if df_act.empty:
-        st.warning("⚠️ Каналов не найдено. Снизьте фильтры подписчиков, просмотров или ER.")
+        st.warning("⚠️ Каналов не найдено. Попробуйте выбрать широкие настройки: 'Все категории', 'Все ГЕО', 'Все языки'.")
     else:
         total_len = len(df_act)
         good_len = len(df_act[df_act['Score'] == 'Good'])
@@ -214,7 +204,7 @@ if st.session_state.database_state is not None:
         st.markdown("---")
         l1, l2, l3 = st.columns([2, 1, 1])
         with l1:
-            query = st.text_input("🔍 Быстрый фильтр по названию:", "")
+            query = st.text_input("🔍 Быстрый фильтр по названием:", "")
             if query: df_act = df_act[df_act['title'].str.contains(query, case=False)]
         with l2:
             st.download_button(label="📥 Экспорт в CSV", data=df_act.to_csv(index=False).encode('utf-8'), file_name="target.csv", mime="text/csv", use_container_width=True)
