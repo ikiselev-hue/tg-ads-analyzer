@@ -252,8 +252,9 @@ if action_trigger:
                     progress_ui_bar = st.progress(0, text="ИИ анализирует посты...")
                     total_records = len(processing_df)
                     
-                    for index, record in enumerate(processing_df.itertuples()):
+                   for index, record in enumerate(processing_df.itertuples()):
                         ai_data = run_gemini_intelligence(record.title, record.about, record.recent_posts, ui_product_desc, input_gemini_key)
                         ai_scores.append(ai_data.get("score", "5"))
                         ai_verdicts.append(ai_data.get("verdict", "—"))
-                        ai_banners.append(ai_data.get("banner",
+                        ai_banners.append(ai_data.get("banner", "—"))
+                        progress_ui_bar.progress((index + 1) / total_records, text=f"ИИ обработал: {index + 1}/{total_records}")
