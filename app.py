@@ -4,7 +4,21 @@ from io import BytesIO
 st.set_page_config(layout="wide", page_title="Telemetr PRO", page_icon="🎯")
 st.markdown("<style>.metric-box { background-color: #1e222b; padding: 15px; border-radius: 8px; border: 1px solid #2d3139; text-align: center; }</style>", unsafe_allow_html=True)
 
-cat_map = {"Криптовалюта": "crypto", "Бизнес и стартапы": "business", "Финансы и инвестиции": "finance", "Маркетинг и реклама": "marketing", "Блоги / Эксперты", "blogs", "Новостные каналы": "news", "Юмор и развлечения": "humor", "Технологии и софт": "tech", "Образование и наука": "education", "Ставки и беттинг": "betting", "Психология": "psychology"}
+# ИСПРАВЛЕНО: Теперь тут строго стоят двоеточия во всех парах
+cat_map = {
+    "Криптовалюта": "crypto", 
+    "Бизнес и стартапы": "business", 
+    "Финансы и инвестиции": "finance", 
+    "Маркетинг и реклама": "marketing", 
+    "Блоги / Эксперты": "blogs", 
+    "Новостные каналы": "news", 
+    "Юмор и развлечения": "humor", 
+    "Технологии и софт": "tech", 
+    "Образование и наука": "education", 
+    "Ставки и беттинг": "betting", 
+    "Психология": "psychology"
+}
+
 GEOS_LIST = ["russia", "turkey", "india", "brazil", "usa", "uzbekistan", "kazakhstan", "belarus", "ukraine"]
 LANGS_LIST = ["Все языки", "ru", "tr", "en", "hi", "pt", "uz", "kk", "be", "uk", "de", "fr"]
 
@@ -56,4 +70,16 @@ if action:
     if ui_cat != "Все категории": p["category"] = cat_map[ui_cat]
     if ui_lang != "Все языки": p["language"] = ui_lang.lower()
     if g24_min > 0: p["growth_24h_min"] = g24_min
-    if g24_max > 0: p
+    if g24_max > 0: p["growth_24h_max"] = g24_max
+    if v_min > 0: p["views_min"] = v_min
+    if v_max > 0: p["views_max"] = v_max
+    if er_min > 0.0: p["er_min"] = er_min
+    if er_max > 0.0: p["er_max"] = er_max
+    if ads_min > 0: p["ads_index_min"] = ads_min
+    if ads_max > 0: p["ads_index_max"] = ads_max
+
+    res = []
+    if not t_key.strip():
+        res = [
+            {"geo": ui_geo, "lang": "ru", "category": "Бизнес", "title": "🚀 Демо Канал 1", "link": "https://t.me/mock_1", "subs": 75000, "views": 12000, "er": 15.5, "growth_24h": 450, "ads_index": 82, "about": "Тест", "recent_posts": "Посты"},
+            {"geo": ui_geo, "lang": "ru", "category": "Бизнес", "title": "💰 Демо Канал 2", "link": "https://t.me/mock_2", "subs": 120000, "views": 8500, "er": 6.2, "growth_24h": -120, "ads_index": 45, "about": "Тест", "recent_
